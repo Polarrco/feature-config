@@ -21,7 +21,7 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
   >();
   private redisClient: WrappedNodeRedisClient;
   private redisSubscriptionClient: WrappedNodeRedisClient;
-  private ssmClient: SSM;
+  private readonly ssmClient: SSM;
 
   getConfigValue(options: { configName: string }): any {
     let result;
@@ -35,18 +35,17 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
     return result;
   }
 
-  async reloadConfigValue(options: { configName: string }): Promise<void> {
+  async reloadConfigValue(config: FeatureConfig): Promise<void> {
     await this.redisClient.nodeRedis.publish(
       'ReloadConfig',
-      options.configName,
+      JSON.stringify(config),
     );
-    await this.redisClient.quit();
   }
 
-  async updateFeatureConfig(configString: string): Promise<void> {
-    const configName = configString;
-    if (this.featureConfigMap.has(configName)) {
-      const config = this.featureConfigMap.get(configName);
+  async updateFeatureConfig(config: FeatureConfig): Promise<void> {
+    const key = config.path ? config.path + config.key : config.key;
+    if (this.featureConfigMap.has(key)) {
+      const config = this.featureConfigMap.get(key);
       if (config && !config.deprecated) {
         try {
           config.value = await this.ssmClient
@@ -54,23 +53,24 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
             .promise();
         } catch (error) {
           console.log(
-            `Failed to fetch new value for config ${configString} from parameter store`,
+            `Failed to fetch new value for config ${key} from parameter store`,
           );
           throw new Error(
-            `Failed to fetch new value for config ${configString} from parameter store with error: ` +
+            `Failed to fetch new value for config ${key} from parameter store with error: ` +
               error,
           );
         }
-        this.featureConfigMap.set(configName, config);
+        this.featureConfigMap.set(key, config);
       }
     }
   }
 
   async initializeConfig(config: FeatureConfig): Promise<void> {
+    const key = config.path ? config.path + config.key : config.key;
     if (!config.deprecated) {
-      config.value = await this.fetchParameterValue(config.key);
+      config.value = await this.fetchParameterValue(key);
     }
-    this.featureConfigMap.set(config.key, config);
+    this.featureConfigMap.set(key, config);
   }
 
   private async fetchParameterValue(key: string): Promise<string | undefined> {
@@ -133,7 +133,8 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
 
   private initFeatureConfigMap(configList: FeatureConfig[]): void {
     configList.forEach((config: FeatureConfig) => {
-      this.featureConfigMap.set(config.key, config);
+      const key = config.path ? config.path + config.key : config.key;
+      this.featureConfigMap.set(key, config);
     });
   }
 
@@ -153,6 +154,7 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     await this.redisSubscriptionClient.quit();
+    await this.redisClient.quit();
   }
 
   constructor(
@@ -174,7 +176,7 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
     this.redisSubscriptionClient.nodeRedis.subscribe(
       'ReloadConfig',
       async (error: any, data: string) => {
-        if (!error) await this.updateFeatureConfig(data);
+        if (!error) await this.updateFeatureConfig(JSON.parse(data));
       },
     );
   }
