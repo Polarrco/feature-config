@@ -33,7 +33,6 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
   async updateFeatureConfig(config: FeatureConfig): Promise<void> {
     const key = config.path ? config.path + config.key : config.key;
     if (this.featureConfigMap.has(key)) {
-      const config = this.featureConfigMap.get(key);
       if (this.ssmClient && config && !config.deprecated) {
         try {
           config.value = await this.ssmClient.getParameter({ Name: config.key, WithDecryption: true }).promise();
