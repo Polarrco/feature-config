@@ -1,27 +1,16 @@
-import {
-  Inject,
-  Injectable,
-  OnModuleDestroy,
-  OnModuleInit,
-} from '@nestjs/common';
-import { FeatureConfig } from './FeatureConfig';
-import { SSM } from 'aws-sdk';
-import { createNodeRedisClient, WrappedNodeRedisClient } from 'handy-redis';
-import { Parameter } from 'aws-sdk/clients/ssm';
-import {
-  FeatureConfigModuleOptions,
-  FeatureConfigModuleOptionsIoCAnchor,
-} from './FeatureConfigModuleOptions';
+import { Inject, Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { FeatureConfig } from "./FeatureConfig";
+import { SSM } from "aws-sdk";
+import { createNodeRedisClient, WrappedNodeRedisClient } from "handy-redis";
+import { Parameter } from "aws-sdk/clients/ssm";
+import { FeatureConfigModuleOptions, FeatureConfigModuleOptionsIoCAnchor } from "./FeatureConfigModuleOptions";
 
 @Injectable()
 export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
-  private featureConfigMap: Map<string, FeatureConfig> = new Map<
-    string,
-    FeatureConfig
-  >();
-  private redisClient: WrappedNodeRedisClient;
-  private redisSubscriptionClient: WrappedNodeRedisClient;
-  private readonly ssmClient: SSM;
+  private featureConfigMap: Map<string, FeatureConfig> = new Map<string, FeatureConfig>();
+  private redisClient?: WrappedNodeRedisClient;
+  private redisSubscriptionClient?: WrappedNodeRedisClient;
+  private readonly ssmClient?: SSM;
 
   getConfigValue(options: { configName: string }): any {
     let result;
@@ -36,29 +25,21 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
   }
 
   async reloadConfigValue(config: FeatureConfig): Promise<void> {
-    await this.redisClient.nodeRedis.publish(
-      'ReloadConfig',
-      JSON.stringify(config),
-    );
+    if (this.redisClient) {
+      await this.redisClient.nodeRedis.publish("ReloadConfig", JSON.stringify(config));
+    }
   }
 
   async updateFeatureConfig(config: FeatureConfig): Promise<void> {
     const key = config.path ? config.path + config.key : config.key;
     if (this.featureConfigMap.has(key)) {
       const config = this.featureConfigMap.get(key);
-      if (config && !config.deprecated) {
+      if (this.ssmClient && config && !config.deprecated) {
         try {
-          config.value = await this.ssmClient
-            .getParameter({ Name: config.key, WithDecryption: true })
-            .promise();
+          config.value = await this.ssmClient.getParameter({ Name: config.key, WithDecryption: true }).promise();
         } catch (error) {
-          console.log(
-            `Failed to fetch new value for config ${key} from parameter store`,
-          );
-          throw new Error(
-            `Failed to fetch new value for config ${key} from parameter store with error: ` +
-              error,
-          );
+          console.log(`Failed to fetch new value for config ${key} from parameter store`);
+          throw new Error(`Failed to fetch new value for config ${key} from parameter store with error: ` + error);
         }
         this.featureConfigMap.set(key, config);
       }
@@ -76,22 +57,12 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
   private async fetchParameterValue(key: string): Promise<string | undefined> {
     try {
       if (this.ssmClient) {
-        return (
-          await this.ssmClient
-            .getParameter({ Name: key, WithDecryption: true })
-            .promise()
-        ).Parameter?.Value;
+        return (await this.ssmClient.getParameter({ Name: key, WithDecryption: true }).promise()).Parameter?.Value;
       }
     } catch (error) {
-      console.log(
-        `Failed to fetch value from parameter store for key: ${key} with error: ${JSON.stringify(
-          error,
-        )}`,
-      );
+      console.log(`Failed to fetch value from parameter store for key: ${key} with error: ${JSON.stringify(error)}`);
       throw new Error(
-        `Failed to fetch value from parameter store for key: ${key} with error: ${JSON.stringify(
-          error,
-        )}`,
+        `Failed to fetch value from parameter store for key: ${key} with error: ${JSON.stringify(error)}`
       );
     }
   }
@@ -100,34 +71,32 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
     return this.featureConfigMap;
   }
 
-  private async initializeFeatureConfigs(
-    configList: FeatureConfig[],
-  ): Promise<any> {
+  private async initializeFeatureConfigs(configList: FeatureConfig[]): Promise<any> {
     this.initFeatureConfigMap(configList);
-    try {
-      const featureConfigKeys = this.getFeatureConfigKeys();
-      const values = await this.ssmClient
-        .getParameters({
-          Names: featureConfigKeys,
-          WithDecryption: true,
-        })
-        .promise();
-      const result = values.Parameters;
-      result?.forEach((entry: Parameter) => {
-        if (entry.Name && entry.Value) {
-          const configName = entry.Name;
-          const config = this.featureConfigMap.get(configName);
-          if (config) {
-            config.value = entry.Value;
-            this.featureConfigMap.set(configName, config);
+    if (this.ssmClient) {
+      try {
+        const featureConfigKeys = this.getFeatureConfigKeys();
+        const values = await this.ssmClient
+          .getParameters({
+            Names: featureConfigKeys,
+            WithDecryption: true,
+          })
+          .promise();
+        const result = values.Parameters;
+        result?.forEach((entry: Parameter) => {
+          if (entry.Name && entry.Value) {
+            const configName = entry.Name;
+            const config = this.featureConfigMap.get(configName);
+            if (config) {
+              config.value = entry.Value;
+              this.featureConfigMap.set(configName, config);
+            }
           }
-        }
-      });
-    } catch (error) {
-      console.log(`Failed to initialize config values`);
-      throw new Error(
-        `Failed to initialize config values with error: ` + error,
-      );
+        });
+      } catch (error) {
+        console.log(`Failed to initialize config values`);
+        throw new Error(`Failed to initialize config values with error: ` + error);
+      }
     }
   }
 
@@ -153,31 +122,34 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.redisSubscriptionClient.quit();
-    await this.redisClient.quit();
+    if (this.redisClient) {
+      await this.redisClient.quit();
+    }
+    if (this.redisSubscriptionClient) {
+      await this.redisSubscriptionClient.quit();
+    }
   }
 
   constructor(
     @Inject(FeatureConfigModuleOptionsIoCAnchor)
-    private readonly options: FeatureConfigModuleOptions,
+    private readonly options: FeatureConfigModuleOptions
   ) {
-    this.ssmClient = new SSM({
-      accessKeyId: options.SSM.accessKeyId,
-      secretAccessKey: options.SSM.secretAccessKey,
-      region: options.SSM.region,
-      ...(options.SSM.options ? options.SSM.options : {}),
-    });
-    this.redisClient = createNodeRedisClient(options.Redis.url);
-    this.redisClient.nodeRedis.on('error', (error: any) => console.log(error));
-    this.redisSubscriptionClient = createNodeRedisClient(options.Redis.url);
-    this.redisSubscriptionClient.nodeRedis.on('error', (error: any) =>
-      console.log(error),
-    );
-    this.redisSubscriptionClient.nodeRedis.subscribe(
-      'ReloadConfig',
-      async (error: any, data: string) => {
+    if (options.SSM) {
+      this.ssmClient = new SSM({
+        accessKeyId: options.SSM.accessKeyId,
+        secretAccessKey: options.SSM.secretAccessKey,
+        region: options.SSM.region,
+        ...(options.SSM.options ? options.SSM.options : {}),
+      });
+    }
+    if (options.Redis) {
+      this.redisClient = createNodeRedisClient(options.Redis.url);
+      this.redisClient.nodeRedis.on("error", (error: any) => console.log(error));
+      this.redisSubscriptionClient = createNodeRedisClient(options.Redis.url);
+      this.redisSubscriptionClient.nodeRedis.on("error", (error: any) => console.log(error));
+      this.redisSubscriptionClient.nodeRedis.subscribe("ReloadConfig", async (error: any, data: string) => {
         if (!error) await this.updateFeatureConfig(JSON.parse(data));
-      },
-    );
+      });
+    }
   }
 }

@@ -1,9 +1,6 @@
-import { DynamicModule, Global, Module } from '@nestjs/common';
-import { FeatureConfigManager } from './FeatureConfigManager';
-import {
-  FeatureConfigModuleOptions,
-  FeatureConfigModuleOptionsIoCAnchor,
-} from './FeatureConfigModuleOptions';
+import { DynamicModule, Global, Module } from "@nestjs/common";
+import { FeatureConfigManager } from "./FeatureConfigManager";
+import { FeatureConfigModuleOptions, FeatureConfigModuleOptionsIoCAnchor } from "./FeatureConfigModuleOptions";
 
 @Global()
 @Module({
@@ -24,9 +21,7 @@ export class FeatureConfigModule {
     };
   }
 
-  static forRootAsync(
-    options: Promise<FeatureConfigModuleOptions>,
-  ): DynamicModule {
+  static forRootAsync(options: Promise<FeatureConfigModuleOptions>): DynamicModule {
     return {
       module: FeatureConfigModule,
       providers: [

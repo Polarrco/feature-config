@@ -1,13 +1,13 @@
-import { FeatureConfig } from './FeatureConfig';
+import { FeatureConfig } from "./FeatureConfig";
 
 interface OptionsForFeatureConfig {
-  SSM: {
+  SSM?: {
     accessKeyId: string;
     secretAccessKey: string;
     region: string;
     options?: Record<string, any>;
   };
-  Redis: {
+  Redis?: {
     url: string;
   };
   configList: FeatureConfig[];
@@ -15,6 +15,4 @@ interface OptionsForFeatureConfig {
 
 export type FeatureConfigModuleOptions = OptionsForFeatureConfig;
 
-export const FeatureConfigModuleOptionsIoCAnchor = Symbol(
-  'FeatureConfigModuleOptionsIoCAnchor',
-);
+export const FeatureConfigModuleOptionsIoCAnchor = Symbol("FeatureConfigModuleOptionsIoCAnchor");
