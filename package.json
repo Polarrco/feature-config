@@ -4,6 +4,7 @@
   "private": false,
   "files": [
     "dist/",
+    "typings/",
     "index.js",
     "index.d.ts"
   ],
