@@ -93,8 +93,8 @@ export class FeatureConfigManager implements OnModuleInit, OnModuleDestroy {
           }
         });
       } catch (error) {
-        console.log(`Failed to initialize config values`);
-        throw new Error(`Failed to initialize config values with error: ` + error);
+        console.log(`Failed to initialize config values with error: ${JSON.stringify(error)}`);
+        throw new Error(`Failed to initialize config values with error: ${JSON.stringify(error)}`);
       }
     }
   }
